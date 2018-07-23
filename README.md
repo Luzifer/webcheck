@@ -5,11 +5,20 @@
 
 # Luzifer / webcheck
 
-`webcheck` is a CLI tool to check the health of a web page. It is used to check:
+`webcheck` is a CLI tool to check the health of a web page. It was written because there are quite a lot of GUI tools or services to monitor websites but I did not find any tool to execute on the CLI to to an ad-hoc monitoring of a page. To fix this I wrote this tool.
+
+`webcheck` is used to check:
 
 - HTTP status code 2xx
 - Regular expression match on the response body
-- Request answer within certain timeout
+- Response within a certain timeout
+- Response times (only display, no checking)
+
+If the request is marked as a `FAIL` all headers and the response body are written into a log file to be debugged manually. This can for example be helpful if your webserver delivers weird responses on certain requests and you are using `webcheck` to find them.
+
+## Installation
+
+You either can download a pre-compiled binary for you system from the [Releases](https://github.com/Luzifer/webcheck/releases) section of this repository or if you do have a working Go environment you can just `go get github.com/Luzifer/webcheck` the tool.
 
 ## Usage
 
