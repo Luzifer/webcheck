@@ -1,0 +1,10 @@
+---
+
+image: "reporunner/golang-alpine"
+checkout_dir: /go/src/github.com/Luzifer/webcheck
+
+commands:
+  - make publish
+
+environment:
+  CGO_ENABLED: 0
