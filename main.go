@@ -78,7 +78,7 @@ func (c *checkResult) AddDuration(d time.Duration) {
 	c.Durations = append(c.Durations, d)
 }
 
-func (c checkResult) DurationStats() string {
+func (c *checkResult) DurationStats() string {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
@@ -104,7 +104,7 @@ func (c checkResult) DurationStats() string {
 	)
 }
 
-func (c checkResult) Equals(r *checkResult) bool {
+func (c *checkResult) Equals(r *checkResult) bool {
 	return c.Status == r.Status && c.Message == r.Message
 }
 
