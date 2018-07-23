@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -149,6 +150,8 @@ func main() {
 
 	lastResult := newCheckResult(statusUnknown, "Uninitialized", 0)
 
+	go cleanupLogFiles()
+
 	for range time.Tick(cfg.Interval) {
 		var (
 			body   *bytes.Buffer
@@ -177,6 +180,25 @@ func main() {
 		}
 
 		lastResult.Print()
+	}
+}
+
+func cleanupLogFiles() {
+	for {
+		if err := filepath.Walk(cfg.LogDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() && time.Since(info.ModTime()) > cfg.LogRetention {
+				return os.Remove(path)
+			}
+
+			return nil
+		}); err != nil {
+			fmt.Println()
+			log.WithError(err).Error("Could not clean up logs")
+		}
 	}
 }
 
