@@ -17,7 +17,7 @@
 $ webcheck --help
 Usage of webcheck:
   -i, --interval duration        Check interval (default 1s)
-  -l, --log-dir string           Directory to log non-matched requests to (default "./request-log/")
+  -l, --log-dir string           Directory to log non-matched requests to (default "/tmp/resp-log/")
       --log-retention duration   When to clean up file from log-dir (default 24h0m0s)
   -m, --match string             RegExp to match the response body against to validate it (default ".*")
       --no-log                   Disable response body logging
