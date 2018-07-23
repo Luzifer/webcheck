@@ -25,7 +25,7 @@ var (
 	cfg = struct {
 		DisableLog     bool          `flag:"no-log" default:"false" description:"Disable response body logging"`
 		Interval       time.Duration `flag:"interval,i" default:"1s" description:"Check interval"`
-		LogDir         string        `flag:"log-dir,l" default:"./request-log/" description:"Directory to log non-matched requests to"`
+		LogDir         string        `flag:"log-dir,l" default:"/tmp/resp-log/" description:"Directory to log non-matched requests to"`
 		LogRetention   time.Duration `flag:"log-retention" default:"24h" description:"When to clean up file from log-dir"`
 		Match          string        `flag:"match,m" default:".*" description:"RegExp to match the response body against to validate it"`
 		Timeout        time.Duration `flag:"timeout,t" default:"30s" description:"Timeout for the request"`
@@ -276,7 +276,7 @@ func dumpRequest(body io.Reader) (string, error) {
 		return "", err
 	}
 
-	f, err := ioutil.TempFile(cfg.LogDir, "request")
+	f, err := ioutil.TempFile(cfg.LogDir, "resp")
 	if err != nil {
 		return "", err
 	}
