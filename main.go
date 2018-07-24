@@ -19,7 +19,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const dateFormat = time.RFC1123
+const (
+	dateFormat             = time.RFC1123
+	numHistoricalDurations = 300
+)
 
 var (
 	cfg = struct {
@@ -54,7 +57,7 @@ const (
 
 type checkResult struct {
 	DumpFile  string
-	Durations []time.Duration
+	Durations *ringDuration
 	Message   string
 	Start     time.Time
 	Status    checkStatus
@@ -64,8 +67,11 @@ type checkResult struct {
 }
 
 func newCheckResult(status checkStatus, message string, duration time.Duration) *checkResult {
+	r := newRingDuration(numHistoricalDurations)
+	r.SetNext(duration)
+
 	return &checkResult{
-		Durations: []time.Duration{duration},
+		Durations: r,
 		Message:   message,
 		Start:     time.Now(),
 		Status:    status,
@@ -76,7 +82,7 @@ func (c *checkResult) AddDuration(d time.Duration) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.Durations = append(c.Durations, d)
+	c.Durations.SetNext(d)
 }
 
 func (c *checkResult) DurationStats() string {
@@ -84,7 +90,7 @@ func (c *checkResult) DurationStats() string {
 	defer c.lock.RUnlock()
 
 	var (
-		s             = stats.LoadRawData(c.Durations)
+		s             = stats.LoadRawData(c.Durations.GetAll())
 		min, avg, max float64
 		err           error
 	)
@@ -176,7 +182,7 @@ func main() {
 				lastResult.DumpFile = fn
 			}
 		} else {
-			lastResult.AddDuration(result.Durations[0])
+			lastResult.AddDuration(result.Durations.GetCurrent())
 		}
 
 		lastResult.Print()
