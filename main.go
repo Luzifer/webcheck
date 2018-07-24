@@ -184,7 +184,11 @@ func main() {
 }
 
 func cleanupLogFiles() {
-	for {
+	for range time.Tick(10 * time.Second) {
+		if info, err := os.Stat(cfg.LogDir); err != nil || !info.IsDir() {
+			continue
+		}
+
 		if err := filepath.Walk(cfg.LogDir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
