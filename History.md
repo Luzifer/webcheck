@@ -1,3 +1,8 @@
+# 0.2.1 / 2018-07-24
+
+  * Fix: Limit historical performance data
+  * Fix: Prevent high CPU / cleaning up non existent directory
+
 # 0.2.0 / 2018-07-23
 
   * Rename default values for log directory
