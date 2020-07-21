@@ -14,9 +14,10 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/Luzifer/rconfig"
 	"github.com/montanaflynn/stats"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/Luzifer/rconfig/v2"
 )
 
 const (
@@ -137,6 +138,7 @@ func (c *checkResult) Print() {
 }
 
 func init() {
+	rconfig.AutoEnv(true)
 	if err := rconfig.ParseAndValidate(&cfg); err != nil {
 		log.Fatalf("Unable to parse commandline options: %s", err)
 	}
