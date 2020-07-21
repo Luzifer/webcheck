@@ -1,3 +1,8 @@
+# 0.2.2 / 2020-07-21
+
+  * Update dependencies
+  * Switch to go modules
+
 # 0.2.1 / 2018-07-24
 
   * Fix: Limit historical performance data
