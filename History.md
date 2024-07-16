@@ -1,3 +1,9 @@
+# 0.2.3 / 2024-07-16
+
+  * Fix: Do not panic when no-log is enabled
+  * Deps: Update dependencies
+  * Lint: Resolve linter errors, improve code
+
 # 0.2.2 / 2020-07-21
 
   * Update dependencies
