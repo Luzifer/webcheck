@@ -74,7 +74,7 @@ func main() {
 
 	for range time.Tick(cfg.Interval) {
 		var (
-			body   *bytes.Buffer
+			body   io.ReadWriter
 			result *checkResult
 		)
 
