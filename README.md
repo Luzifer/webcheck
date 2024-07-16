@@ -1,4 +1,3 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/Luzifer/webcheck)](https://goreportcard.com/report/github.com/Luzifer/webcheck)
 ![](https://badges.fyi/github/license/Luzifer/webcheck)
 ![](https://badges.fyi/github/downloads/Luzifer/webcheck)
 ![](https://badges.fyi/github/latest-release/Luzifer/webcheck)
@@ -18,7 +17,7 @@ If the request is marked as a `FAIL` all headers and the response body are writt
 
 ## Installation
 
-You either can download a pre-compiled binary for you system from the [Releases](https://github.com/Luzifer/webcheck/releases) section of this repository or if you do have a working Go environment you can just `go get github.com/Luzifer/webcheck` the tool.
+You either can download a pre-compiled binary for you system from the [Releases](https://github.com/Luzifer/webcheck/releases) section of this repository or if you do have a working Go environment you can just `go install github.com/Luzifer/webcheck@latest` the tool.
 
 ## Usage
 
@@ -27,6 +26,7 @@ $ webcheck --help
 Usage of webcheck:
   -i, --interval duration        Check interval (default 1s)
   -l, --log-dir string           Directory to log non-matched requests to (default "/tmp/resp-log/")
+      --log-level string         Log level (debug, info, warn, error, fatal) (default "info")
       --log-retention duration   When to clean up file from log-dir (default 24h0m0s)
   -m, --match string             RegExp to match the response body against to validate it (default ".*")
       --no-log                   Disable response body logging
