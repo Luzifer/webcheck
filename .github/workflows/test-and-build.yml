@@ -1,0 +1,55 @@
+---
+
+name: test-and-build
+on:
+  push:
+    branches: ['*']
+    tags: ['v*']
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  test-and-build:
+    defaults:
+      run:
+        shell: bash
+
+    container:
+      image: luzifer/gh-arch-env
+      env:
+        CGO_ENABLED: 0
+        GOPATH: /go
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          show-progress: false
+
+      - name: Marking workdir safe
+        run: git config --global --add safe.directory /__w/webcheck/webcheck
+
+      - name: 'Lint and test code'
+        run: |
+          go test -cover -v ./...
+          golangci-lint run ./...
+
+      - name: Build release
+        run: make publish
+
+      - name: Extract changelog
+        run: 'awk "/^#/ && ++c==2{exit}; /^#/f" "History.md" | tail -n +2 >release_changelog.md'
+
+      - name: Release
+        uses: ncipollo/release-action@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          artifacts: '.build/*'
+          bodyFile: release_changelog.md
+          draft: false
+          generateReleaseNotes: false
+
+...
