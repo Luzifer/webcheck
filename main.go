@@ -2,27 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
-	"sync"
-	"text/template"
 	"time"
 
-	"github.com/montanaflynn/stats"
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 
 	"github.com/Luzifer/rconfig/v2"
 )
 
 const (
-	dateFormat             = time.RFC1123
-	numHistoricalDurations = 300
+	cleanupInterval = 10 * time.Second
+	logFolderPerms  = 0o750
 )
 
 var (
@@ -30,6 +26,7 @@ var (
 		DisableLog     bool          `flag:"no-log" default:"false" description:"Disable response body logging"`
 		Interval       time.Duration `flag:"interval,i" default:"1s" description:"Check interval"`
 		LogDir         string        `flag:"log-dir,l" default:"/tmp/resp-log/" description:"Directory to log non-matched requests to"`
+		LogLevel       string        `flag:"log-level" default:"info" description:"Log level (debug, info, warn, error, fatal)"`
 		LogRetention   time.Duration `flag:"log-retention" default:"24h" description:"When to clean up file from log-dir"`
 		Match          string        `flag:"match,m" default:".*" description:"RegExp to match the response body against to validate it"`
 		Timeout        time.Duration `flag:"timeout,t" default:"30s" description:"Timeout for the request"`
@@ -40,120 +37,35 @@ var (
 	version = "dev"
 )
 
-type checkStatus uint
-
-func (c checkStatus) String() string {
-	return map[checkStatus]string{
-		statusUnknown: "UNKN",
-		statusFailed:  "FAIL",
-		statusOk:      "OKAY",
-	}[c]
-}
-
-const (
-	statusUnknown checkStatus = iota
-	statusOk
-	statusFailed
-)
-
-type checkResult struct {
-	DumpFile  string
-	Durations *ringDuration
-	Message   string
-	Start     time.Time
-	Status    checkStatus
-
-	lock        sync.RWMutex
-	lastLineLen int
-}
-
-func newCheckResult(status checkStatus, message string, duration time.Duration) *checkResult {
-	r := newRingDuration(numHistoricalDurations)
-	r.SetNext(duration)
-
-	return &checkResult{
-		Durations: r,
-		Message:   message,
-		Start:     time.Now(),
-		Status:    status,
-	}
-}
-
-func (c *checkResult) AddDuration(d time.Duration) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.Durations.SetNext(d)
-}
-
-func (c *checkResult) DurationStats() string {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	var (
-		s             = stats.LoadRawData(c.Durations.GetAll())
-		min, avg, max float64
-		err           error
-	)
-	if min, err = s.Min(); err != nil {
-		min = 0
-	}
-	if avg, err = s.Median(); err != nil {
-		avg = 0
-	}
-	if max, err = s.Max(); err != nil {
-		max = 0
-	}
-
-	return fmt.Sprintf("%s/%s/%s",
-		time.Duration(min).Round(time.Microsecond).String(),
-		time.Duration(avg).Round(time.Microsecond).String(),
-		time.Duration(max).Round(time.Microsecond).String(),
-	)
-}
-
-func (c *checkResult) Equals(r *checkResult) bool {
-	return c.Status == r.Status && c.Message == r.Message
-}
-
-func (c *checkResult) Print() {
-	tpl := strings.Join([]string{
-		`[{{ .Start.Format "` + dateFormat + `" }}]`,
-		`({{ .Status }})`,
-		`{{ .Message }}`,
-		`({{ .DurationStats }})`,
-		`{{ if ne .DumpFile "" }}(Resp: {{ .DumpFile }}){{ end }}`,
-	}, " ")
-	templ := template.Must(template.New("result").Parse(tpl))
-
-	buf := new(bytes.Buffer)
-	templ.Execute(buf, c)
-
-	if c.lastLineLen > 0 {
-		fmt.Fprintf(os.Stdout, "\r%s\r", strings.Repeat(" ", c.lastLineLen))
-	}
-
-	c.lastLineLen = buf.Len()
-	buf.WriteTo(os.Stdout)
-}
-
-func init() {
+func initApp() error {
 	rconfig.AutoEnv(true)
 	if err := rconfig.ParseAndValidate(&cfg); err != nil {
-		log.Fatalf("Unable to parse commandline options: %s", err)
+		return fmt.Errorf("parsing cli options: %w", err)
 	}
 
-	if cfg.VersionAndExit {
-		fmt.Printf("webcheck %s\n", version)
-		os.Exit(0)
+	l, err := logrus.ParseLevel(cfg.LogLevel)
+	if err != nil {
+		return fmt.Errorf("parsing log-level: %w", err)
 	}
+	logrus.SetLevel(l)
+
+	return nil
 }
 
 func main() {
-	http.DefaultClient.Timeout = cfg.Timeout
+	var err error
+	if err = initApp(); err != nil {
+		logrus.WithError(err).Fatal("initializing app")
+	}
+
+	if cfg.VersionAndExit {
+		logrus.WithField("version", version).Info("webcheck")
+		os.Exit(0)
+	}
+
 	matcher, err := regexp.Compile(cfg.Match)
 	if err != nil {
-		log.WithError(err).Fatal("Matcher regexp does not compile")
+		logrus.WithError(err).Fatal("compiling matcher RegExp")
 	}
 
 	lastResult := newCheckResult(statusUnknown, "Uninitialized", 0)
@@ -173,13 +85,13 @@ func main() {
 		result = doCheck(cfg.URL, matcher, body)
 
 		if !result.Equals(lastResult) {
-			fmt.Println()
+			fmt.Println() //nolint:forbidigo
 			lastResult = result
 
 			if result.Status == statusFailed {
 				fn, err := dumpRequest(body)
 				if err != nil {
-					log.WithError(err).Fatal("Could not dump request")
+					logrus.WithError(err).Fatal("logging request")
 				}
 				lastResult.DumpFile = fn
 			}
@@ -187,12 +99,14 @@ func main() {
 			lastResult.AddDuration(result.Durations.GetCurrent())
 		}
 
-		lastResult.Print()
+		if err = lastResult.Print(); err != nil {
+			logrus.WithError(err).Fatal("displaying status")
+		}
 	}
 }
 
 func cleanupLogFiles() {
-	for range time.Tick(10 * time.Second) {
+	for range time.Tick(cleanupInterval) {
 		if info, err := os.Stat(cfg.LogDir); err != nil || !info.IsDir() {
 			continue
 		}
@@ -208,14 +122,17 @@ func cleanupLogFiles() {
 
 			return nil
 		}); err != nil {
-			fmt.Println()
-			log.WithError(err).Error("Could not clean up logs")
+			fmt.Println() //nolint:forbidigo
+			logrus.WithError(err).Error("cleaning up logs")
 		}
 	}
 }
 
 func doCheck(url string, match *regexp.Regexp, responseBody io.Writer) *checkResult {
-	req, _ := http.NewRequest("GET", url, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 
 	respStart := time.Now()
 	resp, err := http.DefaultClient.Do(req)
@@ -227,7 +144,11 @@ func doCheck(url string, match *regexp.Regexp, responseBody io.Writer) *checkRes
 			respDuration,
 		)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			logrus.WithError(err).Error("closing response body (leaked fd)")
+		}
+	}()
 
 	body := new(bytes.Buffer)
 	if _, err = io.Copy(body, resp.Body); err != nil {
@@ -246,8 +167,8 @@ func doCheck(url string, match *regexp.Regexp, responseBody io.Writer) *checkRes
 				respDuration,
 			)
 		}
-		fmt.Fprintln(responseBody)
-		if _, err = responseBody.Write(body.Bytes()); err != nil {
+
+		if _, err = responseBody.Write(append([]byte{'\n'}, body.Bytes()...)); err != nil {
 			return newCheckResult(
 				statusFailed,
 				"Was not able to copy body",
@@ -284,17 +205,23 @@ func dumpRequest(body io.Reader) (string, error) {
 		return "", nil
 	}
 
-	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
-		return "", err
+	if err := os.MkdirAll(cfg.LogDir, logFolderPerms); err != nil {
+		return "", fmt.Errorf("creating log folder: %w", err)
 	}
 
-	f, err := ioutil.TempFile(cfg.LogDir, "resp")
+	f, err := os.CreateTemp(cfg.LogDir, "resp")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("creating log file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			logrus.WithError(err).Error("closing log file (leaked fd)")
+		}
+	}()
 
-	_, err = io.Copy(f, body)
+	if _, err = io.Copy(f, body); err != nil {
+		return "", fmt.Errorf("copying request body: %w", err)
+	}
 
-	return f.Name(), err
+	return f.Name(), nil
 }
